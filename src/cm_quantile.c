@@ -172,7 +172,7 @@ double cm_query(cm_quantile *cm, double quantile) {
     cm_sample *current = cm->samples;
     while (current) {
         max_rank = min_rank + current->width + current->delta;
-        if (max_rank > rank + threshold) {
+        if (max_rank > rank + threshold || min_rank > rank) {
             break;
         }
         min_rank += current->width;

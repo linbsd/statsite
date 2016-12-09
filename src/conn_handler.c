@@ -12,6 +12,7 @@
 #include "metrics.h"
 #include "streaming.h"
 #include "conn_handler.h"
+#include <inttypes.h>
 
 /*
  * Binary defines
@@ -97,6 +98,9 @@ static int stream_formatter(FILE *pipe, void *data, metric_type type, char *name
     timer_hist *t;
     int i;
     char *prefix = GLOBAL_CONFIG->prefixes_final[type];
+    included_metrics_config* counters_config = &(GLOBAL_CONFIG->ext_counters_config);
+    included_metrics_config* timers_config = &(GLOBAL_CONFIG->timers_config);
+
     switch (type) {
         case KEY_VAL:
             STREAM("%s%s|%f|%lld\n", prefix, name, *(double*)value);
@@ -108,51 +112,95 @@ static int stream_formatter(FILE *pipe, void *data, metric_type type, char *name
 
         case COUNTER:
             if (GLOBAL_CONFIG->extended_counters) {
-                STREAM("%s%s.count|%lld|%lld\n", prefix, name, counter_count(value));
-                STREAM("%s%s.mean|%f|%lld\n", prefix, name, counter_mean(value));
-                STREAM("%s%s.stdev|%f|%lld\n", prefix, name, counter_stddev(value));
-                STREAM("%s%s.sum|%f|%lld\n", prefix, name, counter_sum(value));
-                STREAM("%s%s.sum_sq|%f|%lld\n", prefix, name, counter_squared_sum(value));
-                STREAM("%s%s.lower|%f|%lld\n", prefix, name, counter_min(value));
-                STREAM("%s%s.upper|%f|%lld\n", prefix, name, counter_max(value));
-                STREAM("%s%s.rate|%f|%lld\n", prefix, name, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+                if (counters_config->count) {
+                    STREAM("%s.count|%"PRIu64"|%lld\n", name, counter_count(value));
+                    //STREAM("%s%s.count|%"PRIu64"|%lld\n", prefix, name, counter_count(value));
+                }
+                if (counters_config->mean) {
+                    STREAM("%s.mean|%f|%lld\n",  name, counter_mean(value));
+                    //STREAM("%s%s.mean|%f|%lld\n", prefix, name, counter_mean(value));
+                }
+                if (counters_config->stdev) {
+                    STREAM("%s.stdev|%f|%lld\n", name, counter_stddev(value));
+                    //STREAM("%s%s.stdev|%f|%lld\n", prefix, name, counter_stddev(value));
+                }
+                if (counters_config->sum) {
+                    STREAM("%s.sum|%f|%lld\n",  name, counter_sum(value));
+                    //STREAM("%s%s.sum|%f|%lld\n", prefix, name, counter_sum(value));
+                }
+                if (counters_config->sum_sq) {
+                    STREAM("%s.sum_sq|%f|%lld\n", name, counter_squared_sum(value));
+                    //STREAM("%s%s.sum_sq|%f|%lld\n", prefix, name, counter_squared_sum(value));
+                }
+                if (counters_config->lower) {
+                    STREAM("%s.lower|%f|%lld\n",  name, counter_min(value));
+                    //STREAM("%s%s.lower|%f|%lld\n", prefix, name, counter_min(value));
+                }
+                if (counters_config->upper) {
+                    STREAM("%s.upper|%f|%lld\n", name, counter_max(value));
+                    //STREAM("%s%s.upper|%f|%lld\n", prefix, name, counter_max(value));
+                }
+                if (counters_config->rate) {
+                    STREAM("%s.rate|%f|%lld\n", name, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+                    //STREAM("%s%s.rate|%f|%lld\n", prefix, name, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+                }
             } else {
-                STREAM("%s%s|%f|%lld\n", prefix, name, counter_sum(value));
+		//update by liujun 2016/10/18 use rate replace sum()
+                STREAM("%s|%f|%lld\n",  name, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+                //STREAM("%s%s|%f|%lld\n", prefix, name, counter_sum(value));
             }
             break;
 
         case SET:
-            STREAM("%s%s|%lld|%lld\n", prefix, name, set_size(value));
+            STREAM("%s%s|%"PRIu64"|%lld\n", prefix, name, set_size(value));
             break;
 
         case TIMER:
             t = (timer_hist*)value;
-            STREAM("%s%s.sum|%f|%lld\n", prefix, name, timer_sum(&t->tm));
-            STREAM("%s%s.sum_sq|%f|%lld\n", prefix, name, timer_squared_sum(&t->tm));
-            STREAM("%s%s.mean|%f|%lld\n", prefix, name, timer_mean(&t->tm));
-            STREAM("%s%s.lower|%f|%lld\n", prefix, name, timer_min(&t->tm));
-            STREAM("%s%s.upper|%f|%lld\n", prefix, name, timer_max(&t->tm));
-            STREAM("%s%s.count|%lld|%lld\n", prefix, name, timer_count(&t->tm));
-            STREAM("%s%s.stdev|%f|%lld\n", prefix, name, timer_stddev(&t->tm));
-            for (i=0; i < GLOBAL_CONFIG->num_quantiles; i++) {
-                if (GLOBAL_CONFIG->quantiles[i] == 0.5) {
-                    STREAM("%s%s.median|%f|%lld\n", prefix, name, timer_query(&t->tm, 0.5));
-                }
-                STREAM("%s%s.p%0.0f|%f|%lld\n", prefix, name,
-                    GLOBAL_CONFIG->quantiles[i] * 100,
-                    timer_query(&t->tm, GLOBAL_CONFIG->quantiles[i]));
+           // if (timers_config->sum) {
+           //     STREAM("%s%s.sum|%f|%lld\n", prefix, name, timer_sum(&t->tm));
+           // }
+           // if (timers_config->sum_sq) {
+           //     STREAM("%s%s.sum_sq|%f|%lld\n", prefix, name, timer_squared_sum(&t->tm));
+           // }
+            if (timers_config->mean) {
+                STREAM("%s%s.mean|%f|%lld\n", prefix, name, timer_mean(&t->tm));
             }
-            STREAM("%s%s.rate|%f|%lld\n", prefix, name, timer_sum(&t->tm) / GLOBAL_CONFIG->flush_interval);
-            STREAM("%s%s.sample_rate|%f|%lld\n", prefix, name, (double)timer_count(&t->tm) / GLOBAL_CONFIG->flush_interval);
+            //if (timers_config->lower) {
+            //    STREAM("%s%s.lower|%f|%lld\n", prefix, name, timer_min(&t->tm));
+           // }
+           // if (timers_config->upper) {
+           //     STREAM("%s%s.upper|%f|%lld\n", prefix, name, timer_max(&t->tm));
+           // }
+           // if (timers_config->count) {
+           //     STREAM("%s%s.count|%"PRIu64"|%lld\n", prefix, name, timer_count(&t->tm));
+           // }
+            if (timers_config->stdev) {
+                STREAM("%s%s.stdev|%f|%lld\n", prefix, name, timer_stddev(&t->tm));
+            }
+           // for (i=0; i < GLOBAL_CONFIG->num_quantiles; i++) {
+           //     if (timers_config->median && GLOBAL_CONFIG->quantiles[i] == 0.5) {
+           //         STREAM("%s%s.median|%f|%lld\n", prefix, name, timer_query(&t->tm, 0.5));
+          //      }
+           //     STREAM("%s%s.p%0.0f|%f|%lld\n", prefix, name,
+           //         GLOBAL_CONFIG->quantiles[i] * 100,
+           //         timer_query(&t->tm, GLOBAL_CONFIG->quantiles[i]));
+           // }
+           // if (timers_config->rate) {
+           //     STREAM("%s%s.rate|%f|%lld\n", prefix, name, timer_sum(&t->tm) / GLOBAL_CONFIG->flush_interval);
+           // }
+           // if (timers_config->sample_rate) {
+           //     STREAM("%s%s.sample_rate|%f|%lld\n", prefix, name, (double)timer_count(&t->tm) / GLOBAL_CONFIG->flush_interval);
+           // }
 
             // Stream the histogram values
-            if (t->conf) {
-                STREAM("%s%s.histogram.bin_<%0.2f|%u|%lld\n", prefix, name, t->conf->min_val, t->counts[0]);
-                for (i=0; i < t->conf->num_bins-2; i++) {
-                    STREAM("%s%s.histogram.bin_%0.2f|%u|%lld\n", prefix, name, t->conf->min_val+(t->conf->bin_width*i), t->counts[i+1]);
-                }
-                STREAM("%s%s.histogram.bin_>%0.2f|%u|%lld\n", prefix, name, t->conf->max_val, t->counts[i+1]);
-            }
+           // if (t->conf) {
+           //     STREAM("%s%s.histogram.bin_<%0.2f|%u|%lld\n", prefix, name, t->conf->min_val, t->counts[0]);
+             //   for (i=0; i < t->conf->num_bins-2; i++) {
+             //       STREAM("%s%s.histogram.bin_%0.2f|%u|%lld\n", prefix, name, t->conf->min_val+(t->conf->bin_width*i), t->counts[i+1]);
+             //   }
+            //    STREAM("%s%s.histogram.bin_>%0.2f|%u|%lld\n", prefix, name, t->conf->max_val, t->counts[i+1]);
+           // }
             break;
 
         default:
@@ -197,6 +245,9 @@ static int stream_formatter_bin(FILE *pipe, void *data, metric_type type, char *
     #define STREAM_UINT(val) if (!fwrite(&val, sizeof(unsigned int), 1, pipe)) return 1;
     timer_hist *t;
     int i;
+
+    included_metrics_config* counters_config = &(GLOBAL_CONFIG->ext_counters_config);
+
     switch (type) {
         case KEY_VAL:
             STREAM_BIN(BIN_TYPE_KV, BIN_OUT_NO_TYPE, *(double*)value);
@@ -207,14 +258,30 @@ static int stream_formatter_bin(FILE *pipe, void *data, metric_type type, char *
             break;
 
         case COUNTER:
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_SUM, counter_sum(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_SUM_SQ, counter_squared_sum(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MEAN, counter_mean(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_COUNT, counter_count(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_STDDEV, counter_stddev(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MIN, counter_min(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MAX, counter_max(value));
-            STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_RATE, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+            if (counters_config->sum) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_SUM, counter_sum(value));
+            }
+            if (counters_config->sum_sq) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_SUM_SQ, counter_squared_sum(value));
+            }
+            if (counters_config->mean) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MEAN, counter_mean(value));
+            }
+            if (counters_config->count) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_COUNT, counter_count(value));
+            }
+            if (counters_config->stdev) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_STDDEV, counter_stddev(value));
+            }
+            if (counters_config->lower) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MIN, counter_min(value));
+            }
+            if (counters_config->upper) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_MAX, counter_max(value));
+            }
+            if (counters_config->rate) {
+                STREAM_BIN(BIN_TYPE_COUNTER, BIN_OUT_RATE, counter_sum(value) / GLOBAL_CONFIG->flush_interval);
+            }
             break;
 
         case SET:
@@ -358,9 +425,11 @@ static double str2double(const char *s, char **end) {
     char neg = 0;
     const char *orig_s = s;
 
-    if (*s == '-') {
-        neg = 1;
-        s++;
+    switch (*s) {
+        case '-':
+            neg = 1;
+        case '+':
+            s++;
     }
     for (; *s >= '0' && *s <= '9'; s++) {
         val = (val * 10.0) + (*s - '0');
@@ -396,7 +465,9 @@ static int handle_ascii_client_connect(statsite_conn_handler *handle) {
     char *buf, *key, *val_str, *type_str, *sample_str, *endptr;
     metric_type type;
     int buf_len, should_free, status, i, after_len;
-    double val, sample_rate;
+    double val;
+    double sample_rate = 1.0;
+
     while (1) {
         status = extract_to_terminator(handle->conn, '\n', &buf, &buf_len, &should_free);
         if (status == -1) return 0; // Return if no command is available
@@ -406,8 +477,8 @@ static int handle_ascii_client_connect(statsite_conn_handler *handle) {
         status = buffer_after_terminator(buf, buf_len, ':', &val_str, &after_len);
         if (likely(!status)) status |= buffer_after_terminator(val_str, after_len, '|', &type_str, &after_len);
         if (unlikely(status)) {
-            syslog(LOG_WARNING, "Failed parse metric! Input: %s", buf);
-            goto ERR_RET;
+            //syslog(LOG_WARNING, "Failed parse metric! Input: %s", buf);
+            goto END_LOOP;
         }
 
         // Convert the type
@@ -426,12 +497,8 @@ static int handle_ascii_client_connect(statsite_conn_handler *handle) {
                 type = GAUGE;
 
                 // Check if this is a delta update
-                switch (*val_str) {
-                    case '+':
-                        // Advance past the + to avoid breaking str2double
-                        val_str++;
-                    case '-':
-                        type = GAUGE_DELTA;
+                if (*val_str == '+' || *val_str == '-') {
+                    type = GAUGE_DELTA;
                 }
                 break;
             case 's':
@@ -440,12 +507,12 @@ static int handle_ascii_client_connect(statsite_conn_handler *handle) {
             default:
                 type = UNKNOWN;
                 syslog(LOG_WARNING, "Received unknown metric type! Input: %c", *type_str);
-                goto ERR_RET;
+                goto END_LOOP;
         }
 
         // Increment the number of inputs received
         if (GLOBAL_CONFIG->input_counter)
-            metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1);
+            metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1, sample_rate);
 
         // Fast track the set-updates
         if (type == SET) {
@@ -457,24 +524,26 @@ static int handle_ascii_client_connect(statsite_conn_handler *handle) {
         val = str2double(val_str, &endptr);
         if (unlikely(endptr == val_str || errno == ERANGE)) {
             syslog(LOG_WARNING, "Failed value conversion! Input: %s", val_str);
-            goto ERR_RET;
+            goto END_LOOP;
         }
 
-        // Handle counter sampling if applicable
-        if (type == COUNTER && !buffer_after_terminator(type_str, after_len, '@', &sample_str, &after_len)) {
-            sample_rate = str2double(sample_str, &endptr);
+        // Handle counter/timer sampling if applicable
+        if ((type == COUNTER || type == TIMER) && !buffer_after_terminator(type_str, after_len, '@', &sample_str, &after_len)) {
+            double unchecked_rate = str2double(sample_str, &endptr);
             if (unlikely(endptr == sample_str)) {
                 syslog(LOG_WARNING, "Failed sample rate conversion! Input: %s", sample_str);
-                goto ERR_RET;
+                goto END_LOOP;
             }
-            if (sample_rate > 0 && sample_rate <= 1) {
-                // Magnify the value
-                val = val * (1.0 / sample_rate);
+            if (likely(unchecked_rate > 0 && unchecked_rate <= 1)) {
+                sample_rate = unchecked_rate;
+                if (type == COUNTER) {
+                    val = val * (1.0 / sample_rate);
+                }
             }
         }
 
         // Store the sample
-        metrics_add_sample(GLOBAL_METRICS, type, buf, val);
+        metrics_add_sample(GLOBAL_METRICS, type, buf, val, sample_rate);
 
 END_LOOP:
         // Make sure to free the command buffer if we need to
@@ -516,7 +585,7 @@ static int handle_binary_set(statsite_conn_handler *handle, uint16_t *header, in
 
     // Increment the input counter
     if (GLOBAL_CONFIG->input_counter)
-        metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1);
+        metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1, 1.0);
 
     // Update the set
     metrics_set_update(GLOBAL_METRICS, key, key+header[1]);
@@ -606,10 +675,10 @@ static int handle_binary_client_connect(statsite_conn_handler *handle) {
 
         // Increment the input counter
         if (GLOBAL_CONFIG->input_counter)
-            metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1);
+            metrics_add_sample(GLOBAL_METRICS, COUNTER, GLOBAL_CONFIG->input_counter, 1, 1.0);
 
         // Add the sample
-        metrics_add_sample(GLOBAL_METRICS, type, (char*)key, *(double*)(cmd+4));
+        metrics_add_sample(GLOBAL_METRICS, type, (char*)key, *(double*)(cmd+4), 1.0);
 
         // Make sure to free the command buffer if we need to
         if (unlikely(should_free)) free(cmd);

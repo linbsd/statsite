@@ -127,7 +127,7 @@ int write_pidfile(char *pid_file, pid_t pid) {
 
 
 int main(int argc, char **argv) {
-
+    //syslog(LOG_WARNING, "Test Start !");
     // temporarily set the syslog facilty to main and init it
     setup_syslog(LOG_USER, 0);
 
